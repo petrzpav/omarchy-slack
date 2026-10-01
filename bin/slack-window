@@ -1,0 +1,5 @@
+#!/bin/bash
+#
+# slack-window - open (or focus) the Slack client in its own terminal window.
+
+exec omarchy-launch-or-focus-tui --app-id=org.omarchy.slack "$(dirname "$(readlink -f "$0")")/slack"

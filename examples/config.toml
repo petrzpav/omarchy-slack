@@ -1,0 +1,13 @@
+# Desktop notifications for DMs, mentions and replies in threads you're in.
+notify = true
+
+# Channels that only count as unread when you're mentioned.
+muted = []          # e.g. ["random", "social"]
+
+# Messages fetched when you open a conversation (older ones load when you scroll up).
+history = 100
+
+# Override any key, e.g.
+# [keys]
+# palette = "ctrl+p"
+# react = "ctrl+r"

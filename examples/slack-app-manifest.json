@@ -1,0 +1,36 @@
+{
+  "display_information": {
+    "name": "Omarchy Slack",
+    "description": "Terminal Slack client (petrzpav.slack). Reads and writes as you.",
+    "background_color": "#1d1f21"
+  },
+  "oauth_config": {
+    "scopes": {
+      "user": [
+        "channels:history", "groups:history", "im:history", "mpim:history",
+        "channels:read", "groups:read", "im:read", "mpim:read",
+        "channels:write", "groups:write", "im:write", "mpim:write",
+        "chat:write", "reactions:read", "reactions:write",
+        "users:read", "team:read", "emoji:read",
+        "files:read", "files:write", "search:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "user_events": [
+        "message.channels", "message.groups", "message.im", "message.mpim",
+        "reaction_added", "reaction_removed",
+        "channel_rename", "group_rename", "channel_archive", "group_archive",
+        "channel_unarchive", "group_unarchive", "channel_left", "group_left",
+        "channel_created", "channel_deleted", "group_deleted",
+        "member_joined_channel", "member_left_channel", "im_created",
+        "user_change", "team_join", "emoji_changed"
+      ]
+    },
+    "interactivity": { "is_enabled": false },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

@@ -1,0 +1,14 @@
+[project]
+name = "petrzpav-slack"
+version = "0.1.0"
+description = "Fast terminal Slack for Omarchy: Ctrl+P to any conversation, live over Socket Mode"
+requires-python = ">=3.12"
+dependencies = [
+  "textual>=6",
+  "httpx>=0.27",
+  "websockets>=13",
+  "emoji>=2.12",
+]
+
+[tool.uv]
+package = false

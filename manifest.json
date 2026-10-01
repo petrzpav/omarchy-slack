@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "petrzpav.slack",
+  "name": "Slack",
+  "version": "0.1.0",
+  "author": "Pavel Petržela",
+  "license": "MIT",
+  "description": "Fast terminal Slack: one conversation on the screen, Ctrl+P to any other, live over Socket Mode.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "Slack",
+    "description": "Unread mentions and DMs. Click to open Slack.",
+    "category": "Status",
+    "aliases": ["slack", "chat", "messages"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": { "hideWhenRead": false },
+    "schema": [
+      {
+        "key": "hideWhenRead",
+        "type": "boolean",
+        "label": "Hide when all is read",
+        "description": "Only show the icon while you have unread mentions or DMs.",
+        "defaultValue": false
+      }
+    ]
+  }
+}

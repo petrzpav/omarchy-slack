@@ -1,0 +1,16 @@
+#!/bin/bash
+#
+# slack - fast terminal Slack.
+#
+#   slack                 open the client
+#   slack open <id>       open it on a conversation
+#   slack auth            store your Slack tokens
+#   slack daemon          keep the local copy live, notify (slack-sync.service runs this)
+#   slack unread [--cached] [--json]   unread mentions + DMs, for the bar
+#
+# Config lives in ~/.config/petrzpav-slack (config.toml, secrets).
+
+root=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+export UV_PROJECT_ENVIRONMENT="${XDG_DATA_HOME:-$HOME/.local/share}/petrzpav-slack/venv"
+export PYTHONPATH="$root/lib${PYTHONPATH:+:$PYTHONPATH}"
+exec uv run --quiet --project "$root" python -m slacktui "$@"
