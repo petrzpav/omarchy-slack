@@ -22,7 +22,7 @@ DEFAULT_KEYS = {
     "open": "ctrl+o",
     "browser": "alt+o",
     "attach": "alt+a",
-    "paste": "ctrl+v",
+    "paste": "ctrl+v,ctrl+shift+v,shift+insert",
     "copy": "ctrl+c",
     "prev_thread": "ctrl+pageup",
     "next_thread": "ctrl+pagedown",
@@ -38,6 +38,7 @@ class Config:
     muted: list[str] = field(default_factory=list)   # channel names that never count as unread
     notify_channels: list[str] = field(default_factory=list)   # channels where every message notifies
     history: int = 100            # messages fetched when a conversation is opened
+    selection: str = ""           # background of the selected message; empty = the Omarchy theme's
     keys: dict[str, str] = field(default_factory=dict)
     secrets: dict[str, str] = field(default_factory=dict)
 
@@ -71,6 +72,7 @@ def load() -> Config:
         muted=[m.lstrip("#") for m in raw.get("muted", [])],
         notify_channels=[m.lstrip("#") for m in raw.get("notify_channels", [])],
         history=int(raw.get("history", 100)),
+        selection=raw.get("selection", ""),
         keys={**DEFAULT_KEYS, **raw.get("keys", {})},
         secrets=read_secrets(CONFIG_DIR / "secrets"),
     )

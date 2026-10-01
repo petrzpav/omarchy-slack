@@ -44,6 +44,7 @@ KEY_NAMES = {"pageup": "PgUp", "pagedown": "PgDn", "down": "↓", "up": "↑", "
 
 
 def pretty(key: str) -> str:
+    key = key.split(",")[0]                    # several keys for one action: show the first
     return "+".join(KEY_NAMES.get(p) or (p.capitalize() if len(p) > 1 else p.upper()) for p in key.split("+"))
 
 
@@ -70,6 +71,19 @@ def size(n: int) -> str:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024
     return ""
+
+
+def theme_selection(default="#4b4f5c") -> str:
+    """The current Omarchy theme's selection color, so a selected message stands out in any theme."""
+    import tomllib
+    try:
+        name = subprocess.run(["omarchy", "theme", "current"], capture_output=True, text=True, timeout=2).stdout.strip()
+        d = subprocess.run(["omarchy", "theme", "dir", name.lower().replace(" ", "-")], capture_output=True,
+                           text=True, timeout=2).stdout.strip()
+        colors = tomllib.loads((Path(d) / "colors.toml").read_text())
+        return colors.get("selection") or colors.get("lighter_background") or default
+    except (OSError, ValueError, subprocess.TimeoutExpired, tomllib.TOMLDecodeError):
+        return default
 
 
 def rank(items: list[dict], query: str, limit=80) -> list[dict]:
@@ -912,7 +926,7 @@ class SlackApp(App):
     #msgs:focus { border: none; border-top: solid $panel-lighten-2; }
     #msgs > .option-list--option { padding: 0 1; }
     #msgs > .option-list--option-highlighted { background: ansi_default; text-style: none; }
-    #msgs:focus > .option-list--option-highlighted { background: #262c36; color: $foreground; text-style: none; }
+    #msgs:focus > .option-list--option-highlighted { background: SELBG; color: $foreground; text-style: none; }
     #msgs > .option-list--separator { color: $panel-lighten-2; }
     #editing { height: 1; }
     #composer { height: auto; min-height: 3; max-height: 12; border: round $panel-lighten-2;
@@ -933,6 +947,7 @@ class SlackApp(App):
     ENABLE_COMMAND_PALETTE = False
 
     def __init__(self, cfg: Config, db: Db | None = None, api: Slack | None = None, listen=True):
+        type(self).CSS = SlackApp.CSS.replace("SELBG", cfg.selection or theme_selection())
         super().__init__()
         self.cfg, self.keys = cfg, cfg.keys
         self.db = db or Db()

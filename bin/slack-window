@@ -1,5 +1,20 @@
 #!/bin/bash
 #
 # slack-window - open (or focus) the Slack client in its own terminal window.
+#
+# Terminals paste only text, and with a screenshot on the clipboard their paste keys do
+# nothing at all. So in Ghostty and foot the paste keys go to the client, which pastes text
+# itself and sends images.
 
-exec omarchy-launch-or-focus-tui --app-id=org.omarchy.slack "$(dirname "$(readlink -f "$0")")/slack"
+app_id=org.omarchy.slack
+slack="$(dirname "$(readlink -f "$0")")/slack"
+term=$(grep -m1 -v '^#' "${XDG_CONFIG_HOME:-$HOME/.config}/xdg-terminals.list" 2>/dev/null)
+
+if [[ $term == *ghostty* ]] && command -v ghostty >/dev/null; then
+  exec omarchy-launch-or-focus "$app_id" "uwsm-app -- ghostty --class=$app_id --gtk-single-instance=false \
+    --keybind=ctrl+v=unbind --keybind=ctrl+shift+v=unbind --keybind=shift+insert=unbind -e $slack"
+elif [[ $term == *foot* ]] && command -v foot >/dev/null; then
+  exec omarchy-launch-or-focus "$app_id" "uwsm-app -- foot --app-id=$app_id \
+    -o key-bindings.clipboard-paste=none -o key-bindings.primary-paste=none $slack"
+fi
+exec omarchy-launch-or-focus-tui --app-id=$app_id "$slack"
