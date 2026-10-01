@@ -4,6 +4,9 @@ notify = true
 # Channels that only count as unread when you're mentioned.
 muted = []          # e.g. ["random", "social"]
 
+# Channels where every new message notifies (not just mentions).
+notify_channels = []   # e.g. ["poptavky"]
+
 # Messages fetched when you open a conversation (older ones load when you scroll up).
 history = 100
 

@@ -13,7 +13,9 @@ apps keep Slack's full API rate limits.
 Everything is painted from a local SQLite copy (`~/.local/share/petrzpav-slack/slack.db`) at once.
 `slack-sync.service` keeps it live over Socket Mode, also while the client is closed. It sends
 desktop notifications (DMs, mentions, replies in your threads) and keeps the unread count for the
-bar. Clicking a notification opens the conversation. While the service isn't running, the client
+bar. Clicking a notification opens the conversation. `notify_channels` in `config.toml` lists channels
+where every new message notifies. Bots' Block Kit messages are shown as text. Images and videos get
+a thumbnail inline. While the service isn't running, the client
 listens itself. What you send shows at once and goes to Slack behind it.
 
 ## Keys
@@ -26,10 +28,15 @@ listens itself. What you send shows at once and goes to Slack behind it.
 | `Enter`, `Shift+Enter` | send, new line (`Ctrl+J` also) |
 | `Tab` | complete `@name`, `#channel`, `:emoji:` |
 | `↑` in an empty box | select messages; `↑ ↓` move, typing goes back to the box |
-| `Enter` on a message | open its thread (reply there; `Esc` back) |
-| `Ctrl+R` | react (toggles) |
+| `Enter` / double click on a message | open its thread (reply there; `Esc` back); one click selects |
+| `Ctrl+PgUp` / `Ctrl+PgDn` | previous / next thread (in a thread: switch to it) |
+| `Ctrl+R` | react (toggles); without a selection, to the newest message |
+| `Ctrl+C` | copy the selected message (or the text selected in the box) |
+| `Ctrl+V` | paste: an image on the clipboard is sent (after asking), text goes in the box |
+| `Ctrl+A` | select all in the box |
+| `Shift+drag` | select any text on screen (the terminal's own selection) |
 | `F2`, `Delete` | edit, delete your message |
-| `Ctrl+O`, `Alt+O` | open a file or link of the message, open it in the browser |
+| `Ctrl+O`, `Alt+O` | open a file or link of the message (images in imv, videos in mpv), open it in the browser |
 | `Alt+U` | mark unread from the selected message |
 | `Alt+A` | send a file (the text in the box goes with it) |
 | `F5`, `F1`, `Ctrl+Q` | refresh, help, quit |

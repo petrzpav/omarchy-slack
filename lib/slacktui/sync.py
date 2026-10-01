@@ -243,7 +243,7 @@ class Sync:
             self.maybe_notify(cid, m, me)
 
     def maybe_notify(self, cid: str, m: dict, me: str):
-        if not self.cfg.notify or not shutil.which("notify-send"):
+        if not self.cfg.notify:
             return
         c = self.db.convs().get(cid)
         if not c:
@@ -254,20 +254,23 @@ class Sync:
         if thread:
             parent = self.db.msg(cid, thread) or {}
             mine_thread = parent.get("user") == me or me in parent.get("reply_users", [])
-        if not (direct or mentions_me(m, me) or mine_thread):
+        always = c.get("name") in self.cfg.notify_channels and is_top(m)
+        if not (direct or mentions_me(m, me) or mine_thread or always):
             return
         if c.get("name") in self.cfg.muted and not mentions_me(m, me):
             return
         viewing = self.db.get("viewing") or {}
         if viewing.get("focused") and viewing.get("cid") == cid and viewing.get("thread") == thread \
                 and time.time() - viewing.get("at", 0) < 30:
+            self.report(f"notify skipped (on screen): {cid}")
             return
         users, convs = self.db.users(), self.db.convs()
         who = author(m, users)
         where = conv_name(c, users, me)
         title = who if c.get("is_im") else f"{who} in {where}"
         body = plain(m.get("text") or "📎 file", users, convs, me)[:300]
-        threading.Thread(target=notify, args=(self.db, title, body, cid, m["ts"], thread), daemon=True).start()
+        self.report(f"notify: {title}")
+        notify(self.db, title, body, cid, m["ts"], thread)
 
     # -- socket
 
@@ -364,15 +367,28 @@ def state(s: str, error: str = ""):
 
 def notify(db: Db, title: str, body: str, cid: str, ts: str, thread: str | None):
     """A desktop notification; clicking it opens the conversation in the client."""
-    try:
-        r = subprocess.run(["notify-send", "--app-name=Slack", "--icon=slack", "--wait",
-                            "--action=default=Open", title, body],
-                           capture_output=True, text=True, timeout=600)
-    except (OSError, subprocess.TimeoutExpired):
+    goto = [shutil.which("slack") or "slack", "goto", cid, ts] + ([thread] if thread else [])
+    if shutil.which("omarchy-notification-send"):
+        subprocess.Popen(["omarchy-notification-send", "--app-name", "Slack", "-g", "\uf198", title, body,
+                          "--exec", *goto], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
         return
-    if r.stdout.strip() == "default":
-        db.put("goto", {"cid": cid, "ts": ts, "thread": thread, "at": time.time()})
-        window = shutil.which("slack-window")
-        if window:
-            subprocess.Popen([window], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+
+    def wait():
+        try:
+            r = subprocess.run(["notify-send", "--app-name=Slack", "--icon=slack", "--wait",
+                                "--action=default=Open", title, body],
+                               capture_output=True, text=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired):
+            return
+        if r.stdout.strip() == "default":
+            subprocess.Popen(goto, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    threading.Thread(target=wait, daemon=True).start()
+
+
+def goto(cid: str, ts: str | None = None, thread: str | None = None):
+    """Open the client on a message (from a notification click)."""
+    Db().put("goto", {"cid": cid, "ts": ts, "thread": thread, "at": time.time()})
+    window = shutil.which("slack-window")
+    if window:
+        subprocess.Popen([window], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

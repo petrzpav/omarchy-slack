@@ -57,6 +57,10 @@ def main():
     u.add_argument("--json", action="store_true")
     g = sub.add_parser("open", help="open the client on a conversation")
     g.add_argument("channel", help="conversation id")
+    g2 = sub.add_parser("goto", help="show a message in the client (opening it if needed)")
+    g2.add_argument("channel")
+    g2.add_argument("ts", nargs="?")
+    g2.add_argument("thread", nargs="?")
     args = p.parse_args()
 
     if args.cmd == "auth":
@@ -66,6 +70,9 @@ def main():
         return cmd_unread(cfg, args)
     if not cfg.user_token:
         sys.exit("No Slack token yet: run `slack auth`")
+    if args.cmd == "goto":
+        from .sync import goto
+        return goto(args.channel, args.ts, args.thread)
     if args.cmd == "daemon":
         cmd_daemon(cfg, args)
     else:

@@ -24,12 +24,12 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
-from . import sync
+from . import sync, thumbs
 from .api import Slack
 from .config import CACHE_DIR, Config
 from .db import Db, is_top
-from .mrkdwn import (author, conv_name, emoji_char, emoji_names, fold, from_slack, popular, render,
-                     to_slack, user_name)
+from .mrkdwn import (author, conv_name, emoji_char, emoji_names, fold, from_slack, has_layout, popular, render,
+                     render_blocks, to_slack, user_name)
 
 RULE = 72                 # width of the day and "new" rules
 GROUP_GAP = 300            # same author within 5 minutes: no new name line
@@ -40,8 +40,11 @@ NAME_COLORS = ["#e8a33d", "#6cb6ff", "#4bce97", "#f87168", "#9f8fef", "#e774bb",
 _pending = itertools.count(1)
 
 
+KEY_NAMES = {"pageup": "PgUp", "pagedown": "PgDn", "down": "↓", "up": "↑", "delete": "Del"}
+
+
 def pretty(key: str) -> str:
-    return "+".join(p.capitalize() if len(p) > 1 else p.upper() for p in key.split("+"))
+    return "+".join(KEY_NAMES.get(p) or (p.capitalize() if len(p) > 1 else p.upper()) for p in key.split("+"))
 
 
 def ts_time(ts: str) -> datetime:
@@ -215,6 +218,18 @@ class MsgList(OptionList):
 
     BINDINGS = [Binding("enter", "select", show=False)]
 
+    async def _on_click(self, event: events.Click):
+        """One click selects a message, a double click opens its thread."""
+        event.stop()
+        event.prevent_default()                     # not OptionList's: it opens on one click
+        i = event.style.meta.get("option")
+        if i is None:
+            return
+        self.focus()
+        self.highlighted = i
+        if event.chain >= 2:
+            self.action_select()
+
     def action_cursor_up(self):
         if (self.highlighted or 0) == 0:
             self.screen.load_older()
@@ -250,6 +265,11 @@ class Composer(TextArea):
             event.stop()
             event.prevent_default()
             self.screen.send()
+            return
+        if key == "ctrl+a":
+            event.stop()
+            event.prevent_default()
+            self.select_all()
             return
         if key in ("shift+enter", "ctrl+j"):
             event.stop()
@@ -464,6 +484,11 @@ class ChatScreen(Screen):
             body = render(m.get("text", ""), users, app.convs, me, app.custom_emoji, links)
             body.stylize("dim italic")
             t.append_text(body)
+        elif has_layout(m.get("blocks")):
+            if any(b.get("type") == "rich_text" for b in m["blocks"]):
+                t.append_text(render(m.get("text", ""), users, app.convs, me, app.custom_emoji, links))
+                t.append("\n")
+            t.append_text(render_blocks(m["blocks"], users, app.convs, me, app.custom_emoji, links))
         else:
             body = render(m.get("text", ""), users, app.convs, me, app.custom_emoji, links)
             if m.get("_pending"):
@@ -488,10 +513,18 @@ class ChatScreen(Screen):
         for f in m.get("files", []) or []:
             if f.get("mode") == "tombstone":
                 continue
-            icon = "🖼 " if (f.get("mimetype") or "").startswith("image/") else "📎 "
+            mime = f.get("mimetype") or ""
+            pic = thumbs.render(f, max(16, self.size.width - 8))
+            if pic is not None:
+                t.append("\n")
+                t.append_text(pic)
+                app.fetch_thumb(f)
+            icon = "▶ " if mime.startswith("video/") else "🖼 " if mime.startswith("image/") else "📎 "
             t.append(f"\n{icon}{f.get('name') or f.get('title') or 'file'}", "#6cb6ff")
             if f.get("size"):
                 t.append(f"  {size(f['size'])}", "dim")
+            if pic is not None:
+                t.append(f"  {pretty(app.keys['open'])} open", "dim")
         if m.get("_pending"):
             t.append("  sending…" if not m.get("_failed") else "  not sent", "dim" if not m.get("_failed") else "red")
         if m.get("reactions"):
@@ -569,6 +602,25 @@ class ChatScreen(Screen):
     def on_resize(self):
         self.paint_top()
 
+    def on_descendant_focus(self, _):
+        self.hints()
+
+    def hints(self):
+        k = {n: pretty(v) for n, v in self.app.keys.items()}
+        if self.query_one(MsgList).has_focus:
+            bits = ["Enter/double click " + ("reply" if self.thread else "thread"), f"{k['react']} react",
+                    f"{k['copy']} copy", f"{k['edit']} edit",
+                    f"{k['delete']} delete", f"{k['open']} open", f"{k['mark_unread']} unread", "Esc type"]
+        else:
+            bits = [f"{k['palette']} go to", f"{k['next_unread']} next unread", "↑ messages",
+                    f"{k['react']} react", f"{k['paste']} paste image"]
+        bits.insert(0, f"{k['help']} keys")
+        if self.thread:
+            bits.insert(0, "Esc back")
+        bits.append(f"{k['prev_thread']}/{k['next_thread'].split('+')[-1]} threads")
+        bits = [b for b in bits if b]
+        self.query_one("#status", Static).update(Text(" · ".join(bits), "dim"))
+
     # -- the selected message
 
     def selected(self) -> dict | None:
@@ -588,9 +640,9 @@ class ChatScreen(Screen):
         self.app.push_screen(ChatScreen(self.cid, thread=root))
 
     def action_react(self):
-        m = self.selected()
+        m = self.selected() or (self.msgs[-1] if self.msgs else None)
         if not m:
-            return self.notify("Select a message first (↑ from the composer)", timeout=3)
+            return
         app: SlackApp = self.app
         cid = self.cid
 
@@ -615,7 +667,8 @@ class ChatScreen(Screen):
             self.paint()
             app.submit("fg", lambda: app.api.react(cid, m["ts"], name, add),
                        error=app.fail("Reaction", lambda: self.reload()))
-        self.app.push_screen(Picker("React", source, "Emoji name…"), chosen)
+        what = render(m.get("text", ""), app.users, app.convs, app.me).plain.replace("\n", " ")[:50]
+        self.app.push_screen(Picker(f"React to {author(m, app.users)}: {what}", source, "Emoji name…"), chosen)
 
     def action_edit(self):
         m = self.selected()
@@ -691,6 +744,27 @@ class ChatScreen(Screen):
         app: SlackApp = self.app
         app.submit("bg", lambda: app.api.permalink(self.cid, m["ts"]), app.open_url, app.fail("Link"))
 
+    def action_copy(self):
+        """Copy the selected text in the box, or the selected message."""
+        app: SlackApp = self.app
+        c = self.query_one(Composer)
+        if c.has_focus:
+            text = c.selected_text
+            if not text:
+                return
+        else:
+            m = self.selected()
+            if not m:
+                return
+            text = render(m.get("text", ""), app.users, app.convs, app.me).plain
+            files = [f.get("name") for f in m.get("files", []) or [] if f.get("name")]
+            text = "\n".join([text] + files).strip()
+        try:
+            subprocess.run(["wl-copy"], input=text, text=True, timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            app.copy_to_clipboard(text)
+        self.notify("Copied", timeout=1.5)
+
     def action_mark_unread(self):
         m = self.selected()
         if not m or self.thread:
@@ -709,6 +783,34 @@ class ChatScreen(Screen):
 
     def reload(self):
         self.open(self.cid)
+
+    def action_thread(self, d: int):
+        """In a channel: select the previous/next message with a thread. In a thread: go to that thread."""
+        app: SlackApp = self.app
+        main = app.main() if self.thread else self
+        if not main:
+            return
+        roots = [m["ts"] for m in main.msgs if m.get("reply_count") and is_top(m)
+                 and m.get("subtype") != "thread_broadcast"]
+        ml = main.query_one(MsgList)
+        if self.thread:
+            here = self.thread
+        elif ml.highlighted is not None and ml.has_focus and ml.option_count:
+            here = ml.get_option_at_index(ml.highlighted).id
+        else:
+            here = "9"                                  # from the end
+        target = next((r for r in (reversed(roots) if d < 0 else roots) if (r < here if d < 0 else r > here)), None)
+        if not target:
+            return self.notify("No more threads" if roots else "No threads here", timeout=2)
+        ids = [m["ts"] for m in main.msgs]
+        if self.thread:
+            app.pop_screen()
+            ml.highlighted = ids.index(target) if target in ids else ml.highlighted
+            app.push_screen(ChatScreen(self.cid, thread=target))
+        else:
+            ml.focus()
+            ml.highlighted = ids.index(target)
+            ml.scroll_to_highlight()
 
     # -- writing
 
@@ -836,7 +938,9 @@ class SlackApp(App):
         self.db = db or Db()
         self.api = api or Slack(cfg.user_token)
         self.listen = listen
-        self._pools = {"fg": ThreadPoolExecutor(1, "slack-fg"), "bg": ThreadPoolExecutor(1, "slack-bg")}
+        self._pools = {"fg": ThreadPoolExecutor(1, "slack-fg"), "bg": ThreadPoolExecutor(1, "slack-bg"),
+                       "img": ThreadPoolExecutor(2, "slack-img")}
+        self._thumbs: set[str] = set()
         self.inflight = 0
         self.app_focused = True
         self.error = ""
@@ -906,6 +1010,15 @@ class SlackApp(App):
             bits.append("○ offline")
         return " ".join(bits)
 
+    def fetch_thumb(self, f: dict):
+        """Download a file's thumbnail once; the message repaints in place when it's here."""
+        p = thumbs.path(f)
+        if p.exists() or f["id"] in self._thumbs:
+            return
+        self._thumbs.add(f["id"])
+        src = thumbs.source(f)
+        self.submit("img", lambda: self.api.download(src[0], p), lambda _: self.repaint(), lambda e: None)
+
     def open_url(self, url):
         if url:
             subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -922,7 +1035,10 @@ class SlackApp(App):
             (k["attach"], "attach", "Attach"), (k["refresh"], "refresh", "Refresh"), (k["help"], "help", "Help"),
             (k["react"], "msg('react')", "React"), (k["edit"], "msg('edit')", "Edit"),
             (k["open"], "msg('open')", "Open"), (k["browser"], "msg('browser')", "Browser"),
-            (k["mark_unread"], "msg('mark_unread')", "Mark unread"),
+            (k["mark_unread"], "msg('mark_unread')", "Mark unread"), (k["paste"], "paste", "Paste"),
+            (k["copy"], "msg('copy')", "Copy"),
+            (k["prev_thread"], "msg('thread(-1)')", "Previous thread"),
+            (k["next_thread"], "msg('thread(1)')", "Next thread"),
         ]:
             self._bindings.bind(key, action, desc, show=False, priority=True)
         self._bindings.bind(k["delete"], "msg('delete')", "Delete", show=False)
@@ -1137,7 +1253,61 @@ class SlackApp(App):
     def action_msg(self, what: str):
         s = self.screen
         if isinstance(s, ChatScreen):
-            getattr(s, "action_" + what)()
+            name, _, arg = what.partition("(")
+            fn = getattr(s, "action_" + name)
+            fn(int(arg.rstrip(")"))) if arg else fn()
+
+    def action_paste(self):
+        """Ctrl+V: an image on the clipboard is sent (after asking); text is pasted into the box."""
+        s = self.screen
+        if not isinstance(s, ChatScreen) or not s.cid:
+            if isinstance(self.focused, Input):
+                try:
+                    text = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True,
+                                          timeout=3).stdout
+                except (OSError, subprocess.TimeoutExpired):
+                    text = ""
+                self.focused.insert_text_at_cursor(text.replace("\n", " "))
+            return
+        comp = s.query_one(Composer)
+        try:
+            types = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=3).stdout.split()
+        except (OSError, subprocess.TimeoutExpired):
+            types = []
+        image = next((t for t in ("image/png", "image/jpeg", "image/gif", "image/webp") if t in types), None)
+        if not image:
+            try:
+                text = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True, timeout=3).stdout
+            except (OSError, subprocess.TimeoutExpired):
+                text = ""
+            if text:
+                comp.focus()
+                comp.replace(text, *comp.selection)
+            return
+        data = subprocess.run(["wl-paste", "--type", image], capture_output=True, timeout=10).stdout
+        dest = CACHE_DIR / "pasted" / f"pasted-{time.strftime('%Y%m%d-%H%M%S')}.{image.split('/')[1]}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        dims = ""
+        try:
+            from PIL import Image
+            with Image.open(dest) as im:
+                dims = f" ({im.width}×{im.height})"
+        except Exception:  # noqa: BLE001 - only for the question
+            pass
+        cid, thread = s.cid, s.thread
+
+        def go(yes):
+            if not yes:
+                return
+            comment = to_slack(comp.text.strip(), self.users, self.convs)
+            comp.text = ""
+            self.notify("Sending image…", timeout=2)
+            self.submit("fg", lambda: self.api.upload(cid, dest, thread_ts=thread, comment=comment),
+                        lambda _: self.notify("Image sent", timeout=2), self.fail("Upload"))
+        where = "this thread" if thread else self.name_of(cid)
+        self.push_screen(Confirm(f"Send the image from the clipboard{dims} to {where}?"
+                                 + ("\nThe text in the box goes with it." if comp.text.strip() else "")), go)
 
     def action_refresh(self):
         s = self.screen
@@ -1153,7 +1323,9 @@ class SlackApp(App):
             (f"{pretty(k['palette'])} / {pretty(k['palette2'])}", "Go to a channel or person"),
             (pretty(k["next_unread"]), "Next unread conversation (mentions first)"),
             (pretty(k["search"]), "Search messages (local, Enter on the first line asks Slack)"),
-            ("Enter", "Send · on a message: open its thread"),
+            ("Enter", "Send · on a message: open its thread (or double click it)"),
+            (pretty(k["copy"]), "Copy the selected message (or the text selected in the box)"),
+            ("Shift+drag", "Select any text on screen with the mouse (the terminal's own selection)"),
             ("Shift+Enter / Ctrl+J", "New line"),
             ("Tab", "Complete @name, #channel, :emoji:"),
             ("↑ (empty box)", "Select messages; ↑↓ move, typing returns to the box"),
@@ -1164,6 +1336,9 @@ class SlackApp(App):
             (pretty(k["browser"]), "Open the message in the browser"),
             (pretty(k["mark_unread"]), "Mark unread from the selected message"),
             (pretty(k["attach"]), "Send a file"),
+            (pretty(k["paste"]), "Paste: an image on the clipboard is sent, text goes in the box"),
+            (f"{pretty(k['prev_thread'])} / {pretty(k['next_thread'])}", "Previous / next thread"),
+            ("Ctrl+A", "Select all in the box"),
             ("Esc", "Back from a thread · cancel editing"),
             (pretty(k["refresh"]), "Refresh"),
             ("Ctrl+Q", "Quit"),
