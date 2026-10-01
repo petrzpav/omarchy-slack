@@ -171,6 +171,10 @@ class Db:
         rows = self.q("SELECT data FROM msgs WHERE conv=? AND top=1 ORDER BY ts DESC LIMIT ?", cid, limit)
         return [json.loads(d) for (d,) in reversed(rows)]
 
+    def msgs_from(self, cid: str, since: str) -> list[dict]:
+        rows = self.q("SELECT data FROM msgs WHERE conv=? AND top=1 AND ts>=? ORDER BY ts", cid, since)
+        return [json.loads(d) for (d,) in rows]
+
     def thread(self, cid: str, ts: str) -> list[dict]:
         rows = self.q("SELECT data FROM msgs WHERE conv=? AND (ts=? OR thread_ts=?) ORDER BY ts", cid, ts, ts)
         return [json.loads(d) for (d,) in rows]

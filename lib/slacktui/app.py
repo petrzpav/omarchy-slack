@@ -290,7 +290,8 @@ class ChatScreen(Screen):
         self.limit = 300
         self.msgs: list[dict] = []
         self.pending: list[dict] = []
-        self.shown_key = None
+        self.shown: tuple = (None, [], [])  # (conversation/thread, ids, prompts) on screen
+        self.since: str | None = None     # oldest message shown; newer ones never push it out
         self.editing: dict | None = None
         self.new_from = "9"               # first unread when the conversation was opened
         self.hold_read = False            # after "mark unread": don't mark read again until you leave
@@ -317,7 +318,8 @@ class ChatScreen(Screen):
         app: SlackApp = self.app
         self.cid = cid
         self.limit = 300
-        self.pending, self.shown_key, self.hold_read = [], None, False
+        self.pending, self.hold_read = [], False
+        self.shown, self.since = (None, [], []), None
         self.stop_editing()
         if not self.thread:
             self.new_from = self.first_unread()
@@ -351,11 +353,11 @@ class ChatScreen(Screen):
         def fetch():
             msgs = app.api.history(cid, limit=100, latest=oldest)
             app.db.put_msgs(cid, msgs)
-            return len(msgs)
+            return min((m["ts"] for m in msgs), default=None)
 
-        def done(n):
-            if n and self.cid == cid:
-                self.limit += n
+        def done(first):
+            if first and self.cid == cid:
+                self.since = first
                 self.paint(select_ts=oldest)
         self.notify("Loading older messages…", timeout=2)
         app.submit("bg", fetch, done)
@@ -363,40 +365,69 @@ class ChatScreen(Screen):
     # -- painting
 
     def paint(self, select_ts: str | None = None):
+        """Show what the database has. Only what changed is touched: messages appended,
+        edited or removed at the end are updated in place, so the view never jumps."""
         if not self.cid or not self.is_mounted:
             return
         app: SlackApp = self.app
         db = app.db
-        self.msgs = db.thread(self.cid, self.thread) if self.thread else db.msgs(self.cid, self.limit)
+        if self.thread:
+            self.msgs = db.thread(self.cid, self.thread)
+        elif self.since:
+            self.msgs = db.msgs_from(self.cid, self.since)
+        else:
+            self.msgs = db.msgs(self.cid, self.limit)
+            self.since = self.msgs[0]["ts"] if self.msgs else None
         rows = self.msgs + [p for p in self.pending if p["_cid"] == self.cid]
-        key = (self.cid, self.thread, repr(rows), app.users_gen)
         self.paint_top()
-        if key == self.shown_key and not select_ts:
-            return
-        self.shown_key = key
+        self.links = {}
+        prompts, prev = [], None
+        for m in rows:
+            prompts.append(self.render_msg(m, prev))
+            prev = m
+        ids = [m["ts"] for m in rows]
+        where, old_ids, old_prompts = self.shown
+        self.shown = ((self.cid, self.thread), ids, prompts)
         ml = self.query_one(MsgList)
         at_end = ml.scroll_y >= ml.max_scroll_y - 1 or not ml.option_count
+        k = 0
+        while k < min(len(ids), len(old_ids)) and ids[k] == old_ids[k]:
+            k += 1
+        full = (select_ts or where != (self.cid, self.thread) or k == 0
+                or (self.thread and (len(old_ids) > 1) != (len(ids) > 1)))
+        if not full:
+            if ids == old_ids and prompts == old_prompts:
+                self.schedule_mark()
+                return
+            with app.batch_update():
+                for i in range(k):
+                    if prompts[i] != old_prompts[i]:
+                        ml.replace_option_prompt_at_index(i, prompts[i])
+                for i in range(len(old_ids) - 1, k - 1, -1):
+                    ml.remove_option_at_index(i)
+                if len(ids) > k:
+                    ml.add_options([Option(prompts[i], id=ids[i]) for i in range(k, len(ids))])
+            if at_end:
+                self.call_after_refresh(ml.scroll_end, animate=False)
+            self.schedule_mark()
+            return
         keep = select_ts
         if not keep and ml.highlighted is not None and ml.option_count:
             keep = ml.get_option_at_index(ml.highlighted).id
         scroll = ml.scroll_y
-        self.links = {}
-        opts, prev = [], None
-        for m in rows:
-            opts.append(Option(self.render_msg(m, prev), id=m["ts"]))
-            prev = m
+        opts = [Option(p, id=i) for p, i in zip(prompts, ids)]
         if self.thread and len(rows) > 1:
             opts.insert(1, None)
         ml.set_options(opts)
-        ids = [m["ts"] for m in rows]
         if keep in ids:
             ml.highlighted = ids.index(keep)        # separators don't count in the index
-            if select_ts:
-                self.call_after_refresh(ml.scroll_to_highlight, top=True)
-            elif not at_end:
-                ml.scroll_to(y=scroll, animate=False)
-        if at_end and not select_ts:
+        if select_ts and keep in ids:
+            self.call_after_refresh(ml.scroll_to_highlight, top=True)
+        elif at_end or where != (self.cid, self.thread):
+            ml.scroll_end(animate=False, immediate=True)
             self.call_after_refresh(ml.scroll_end, animate=False)
+        else:
+            self.call_after_refresh(ml.scroll_to, y=scroll, animate=False)
         self.schedule_mark()
 
     def render_msg(self, m: dict, prev: dict | None) -> Text:
@@ -671,7 +702,7 @@ class ChatScreen(Screen):
         app.db.set_last_read(cid, before)
         self.hold_read = True
         self.new_from = m["ts"]
-        self.shown_key = None
+        self.shown = (None, [], [])
         app.refresh_counts()
         self.paint()
         app.submit("fg", lambda: app.api.mark(cid, before), error=app.fail("Mark unread"))
@@ -811,7 +842,7 @@ class SlackApp(App):
         self.error = ""
         self.lock = None
         self.version = -1
-        self.users_gen = 0
+        self.users, self.convs, self.custom_emoji = {}, {}, {}
         self.counts: dict[str, tuple[int, int]] = {}
         self._beat = (None, 0.0)
         self.load_names()
@@ -821,10 +852,8 @@ class SlackApp(App):
         return (self.db.get("me") or {}).get("user_id", "")
 
     def load_names(self):
-        self.users = self.db.users()
-        self.convs = self.db.convs()
+        self.users, self.convs = self.db.users(), self.db.convs()
         self.custom_emoji = self.db.get("emoji", {})
-        self.users_gen += 1
 
     def name_of(self, cid: str) -> str:
         c = self.convs.get(cid)
@@ -984,7 +1013,8 @@ class SlackApp(App):
                 self.db.put_msgs(cid, self.api.history(cid, latest=ts, inclusive=True, limit=30))
                 return len(self.db.msgs(cid, 100000))
             s.open(cid)
-            self.submit("bg", fetch, lambda n: (setattr(s, "limit", n), s.paint(select_ts=ts)))
+            self.submit("bg", fetch, lambda n: (setattr(s, "limit", n), setattr(s, "since", None),
+                                                s.paint(select_ts=ts)))
             return
         s.open(cid, select_ts=ts)
         if ts:
