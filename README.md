@@ -66,8 +66,9 @@ omarchy plugin remove petrzpav.slack
 rm -rf ~/.config/petrzpav-slack ~/.local/share/petrzpav-slack   # optional: config, tokens, local copy
 ```
 
-`install.sh --remove` stops and unlinks `slack-sync.service` and removes the `slack` and
-`slack-window` links it made. It never deletes a file it didn't create.
+`install.sh --remove` stops, disables and unlinks `slack-sync.service` and removes the `slack` and
+`slack-window` links it made. It only touches what it created: a `slack-sync.service` or `slack`
+that isn't this plugin's is skipped on install and left alone on removal.
 
 ## Requirements
 

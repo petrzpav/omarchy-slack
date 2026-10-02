@@ -11,6 +11,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 bin="$HOME/.local/bin"
 conf="${XDG_CONFIG_HOME:-$HOME/.config}/petrzpav-slack"
+unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/slack-sync.service"
 
 mine_link() { [[ -L $1 && $(readlink -f "$1") == "$root"/* ]]; }
 
@@ -24,12 +25,12 @@ link() {
 }
 
 if [[ ${1:-} == --remove ]]; then
-  systemctl --user disable --now slack-sync.service >/dev/null 2>&1 || true
-  for unit in slack-sync.service; do
-    f="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$unit"
-    mine_link "$f" && rm -f "$f"
-  done
-  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  # Only stop, disable and unlink the unit if it's ours; a foreign slack-sync.service stays untouched.
+  if mine_link "$unit"; then
+    systemctl --user disable --now slack-sync.service >/dev/null 2>&1 || true
+    rm -f "$unit"
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+  fi
   for f in "$bin/slack" "$bin/slack-window"; do
     mine_link "$f" && rm -f "$f"
   done
@@ -47,7 +48,11 @@ if [[ ! -e $conf ]]; then
   chmod 600 "$conf/secrets"
 fi
 
-systemctl --user link "$root/systemd/slack-sync.service" >/dev/null
+if [[ -e $unit || -L $unit ]] && ! mine_link "$unit"; then
+  echo "skipped $unit: it already exists and isn't from this plugin"
+else
+  systemctl --user link "$root/systemd/slack-sync.service" >/dev/null
+fi
 
 cat <<MSG
 Installed. Next:
