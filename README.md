@@ -58,6 +58,26 @@ slack-window
 workspace. Then paste its *User OAuth Token* (`xoxp-…`) and an *App-Level Token* with
 `connections:write` (`xapp-…`).
 
+## Remove
+
+```
+~/.config/omarchy/plugins/petrzpav.slack/install.sh --remove
+omarchy plugin remove petrzpav.slack
+rm -rf ~/.config/petrzpav-slack ~/.local/share/petrzpav-slack   # optional: config, tokens, local copy
+```
+
+`install.sh --remove` stops and unlinks `slack-sync.service` and removes the `slack` and
+`slack-window` links it made. It never deletes a file it didn't create.
+
+## Requirements
+
+Omarchy (Ghostty, foot or another terminal), `uv`, `wl-clipboard`, `libnotify` and `xdg-utils`, all
+in a default Omarchy install. On first run `uv` installs Python 3.12+ with Textual, httpx,
+websockets, emoji and Pillow into `~/.local/share/petrzpav-slack/venv`.
+
+Network: only Slack (`slack.com` and the Socket Mode websocket). Your tokens are stored in
+`~/.config/petrzpav-slack/secrets` (chmod 600). No telemetry.
+
 ## Not here
 
 Huddles and calls, canvases, lists, workflows and Block Kit buttons. Use `Alt+O` to open the
