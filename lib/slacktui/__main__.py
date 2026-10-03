@@ -61,6 +61,8 @@ def main():
     g2.add_argument("channel")
     g2.add_argument("ts", nargs="?")
     g2.add_argument("thread", nargs="?")
+    from . import tools
+    tools.add_parsers(sub)
     args = p.parse_args()
 
     if args.cmd == "auth":
@@ -70,6 +72,8 @@ def main():
         return cmd_unread(cfg, args)
     if not cfg.user_token:
         sys.exit("No Slack token yet: run `slack auth`")
+    if getattr(args, "func", None):
+        return args.func(cfg, args)
     if args.cmd == "goto":
         from .sync import goto
         return goto(args.channel, args.ts, args.thread)

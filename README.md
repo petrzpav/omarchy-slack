@@ -84,6 +84,16 @@ Network: only Slack (`slack.com` and the Socket Mode websocket). Your tokens are
 Huddles and calls, canvases, lists, workflows and Block Kit buttons. Use `Alt+O` to open the
 message in the browser for those. Slash commands can't be sent through the API.
 
+## Scripting and Claude Code
+
+The same local copy is scriptable: `slack inbox` (everything unread), `convs`, `read CONV`,
+`thread CONV TS`, `search 'words' [--remote]`, `users`, `post CONV 'text' [--thread TS]`, `react`,
+`edit`, `delete`, `mark`. A conversation is an id, `#channel`, `@person` or part of its name. Lists
+take `--json`; see `slack -h`.
+
+`install.sh` links `skill/` into `~/.claude/skills/slack` when Claude Code is installed, so Claude
+can catch you up and answer for you (it asks before posting).
+
 ## License
 
 MIT

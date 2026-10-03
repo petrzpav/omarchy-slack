@@ -7,6 +7,7 @@
 #   slack auth            store your Slack tokens
 #   slack daemon          keep the local copy live, notify (slack-sync.service runs this)
 #   slack unread [--cached] [--json]   unread mentions + DMs, for the bar
+#   slack convs|inbox|read|thread|search|post|react|mark …   scriptable commands, see `slack -h`
 #
 # Config lives in ~/.config/petrzpav-slack (config.toml, secrets).
 

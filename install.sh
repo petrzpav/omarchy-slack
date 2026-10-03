@@ -31,7 +31,7 @@ if [[ ${1:-} == --remove ]]; then
     rm -f "$unit"
     systemctl --user daemon-reload >/dev/null 2>&1 || true
   fi
-  for f in "$bin/slack" "$bin/slack-window"; do
+  for f in "$bin/slack" "$bin/slack-window" "$HOME/.claude/skills/slack"; do
     mine_link "$f" && rm -f "$f"
   done
   echo "Removed. Your config ($conf) and local copy (~/.local/share/petrzpav-slack) are left in place."
@@ -41,6 +41,14 @@ fi
 mkdir -p "$bin"
 link "$root/bin/slack"
 link "$root/bin/slack-window"
+if [[ -d $HOME/.claude ]]; then   # a skill, so Claude Code can drive the `slack` commands
+  skill="$HOME/.claude/skills/slack"
+  if [[ -e $skill || -L $skill ]] && ! mine_link "$skill"; then
+    echo "skipped $skill: it already exists and isn't from this plugin"
+  else
+    mkdir -p "$HOME/.claude/skills" && ln -sfn "$root/skill" "$skill"
+  fi
+fi
 
 if [[ ! -e $conf ]]; then
   mkdir -p "$conf"
