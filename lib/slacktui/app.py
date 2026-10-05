@@ -19,7 +19,7 @@ from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
@@ -218,11 +218,18 @@ class Help(ModalScreen):
         t = Table.grid(padding=(0, 2))
         t.add_column(style="bold", no_wrap=True)
         t.add_column()
-        for k, d in self.rows:
-            t.add_row(k, d)
-        with Vertical(classes="dialog"):
-            yield Static("Keys", classes="dialog-title")
+        for i, row in enumerate(self.rows):
+            if isinstance(row, str):    # a section heading
+                t.add_row(Text(("\n" if i else "") + row, style="bold underline"), "")
+            else:
+                t.add_row(*row)
+        with VerticalScroll(classes="dialog") as body:    # scrolls when the window is short
+            yield Static("Keys   [dim]↑ ↓ scroll · Esc close[/]", classes="dialog-title")
             yield Static(t)
+        self.body = body
+
+    def on_mount(self):
+        self.body.focus()
 
 
 # ------------------------------------------------------------ chat
@@ -1335,26 +1342,32 @@ class SlackApp(App):
     def action_help(self):
         k = self.keys
         self.push_screen(Help([
-            (f"{pretty(k['palette'])} / {pretty(k['palette2'])}", "Go to a channel or person"),
-            (pretty(k["next_unread"]), "Next unread conversation (mentions first)"),
-            (pretty(k["search"]), "Search messages (local, Enter on the first line asks Slack)"),
-            ("Enter", "Send · on a message: open its thread (or double click it)"),
-            (pretty(k["copy"]), "Copy the selected message (or the text selected in the box)"),
-            ("Shift+drag", "Select any text on screen with the mouse (the terminal's own selection)"),
-            ("Shift+Enter / Ctrl+J", "New line"),
-            ("Tab", "Complete @name, #channel, :emoji:"),
-            ("↑ (empty box)", "Select messages; ↑↓ move, typing returns to the box"),
-            (pretty(k["react"]), "React to the selected message"),
-            (pretty(k["edit"]), "Edit your message"),
-            (pretty(k["delete"]), "Delete your message"),
-            (pretty(k["open"]), "Open a file or link of the message"),
-            (pretty(k["browser"]), "Open the message in the browser"),
-            (pretty(k["mark_unread"]), "Mark unread from the selected message"),
-            (pretty(k["attach"]), "Send a file"),
-            (pretty(k["paste"]), "Paste: an image on the clipboard is sent, text goes in the box"),
-            (f"{pretty(k['prev_thread'])} / {pretty(k['next_thread'])}", "Previous / next thread"),
-            ("Ctrl+A", "Select all in the box"),
-            ("Esc", "Back from a thread · cancel editing"),
-            (pretty(k["refresh"]), "Refresh"),
-            ("Ctrl+Q", "Quit"),
+            "Moving around",
+            (f"{pretty(k['palette'])} / {pretty(k['palette2'])}", "go to a channel or person"),
+            (pretty(k["next_unread"]), "next unread conversation (mentions first)"),
+            (pretty(k["search"]), "search messages (local; Enter on the first line asks Slack)"),
+            ("Enter", "on a message: open its thread (or double click it)"),
+            (pretty(k["prev_thread"]), "previous thread"),
+            (pretty(k["next_thread"]), "next thread"),
+            ("Esc", "back from a thread · cancel editing"),
+            "Writing",
+            ("Enter", "send"),
+            ("Shift+Enter / Ctrl+J", "new line"),
+            ("Tab", "complete @name, #channel, :emoji:"),
+            ("Ctrl+A", "select all in the box"),
+            (pretty(k["paste"]), "paste: an image on the clipboard is sent, text goes in the box"),
+            (pretty(k["attach"]), "send a file"),
+            "Messages",
+            ("↑ (empty box)", "select messages; ↑ ↓ move, typing returns to the box"),
+            (pretty(k["copy"]), "copy the selected message (or the text selected in the box)"),
+            ("Shift+drag", "select any text on screen with the mouse"),
+            (pretty(k["react"]), "react to the selected message"),
+            (pretty(k["edit"]), "edit your message"),
+            (pretty(k["delete"]), "delete your message"),
+            (pretty(k["open"]), "open a file or link of the message"),
+            (pretty(k["browser"]), "open the message in the browser"),
+            (pretty(k["mark_unread"]), "mark unread from the selected message"),
+            "Other",
+            (pretty(k["refresh"]), "refresh"),
+            (f"{pretty(k['help'])}  ·  Ctrl+Q", "this help · quit"),
         ]))
