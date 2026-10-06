@@ -365,25 +365,48 @@ def state(s: str, error: str = ""):
         pass
 
 
-def notify(db: Db, title: str, body: str, cid: str, ts: str, thread: str | None):
-    """A desktop notification; clicking it opens the conversation in the client."""
-    goto = [shutil.which("slack") or "slack", "goto", cid, ts] + ([thread] if thread else [])
-    if shutil.which("omarchy-notification-send"):
-        subprocess.Popen(["omarchy-notification-send", "--app-name", "Slack", "-g", "\uf198", title, body,
-                          "--exec", *goto], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
-        return
+NOTIFICATIONS = dict(object_path="/org/freedesktop/Notifications", bus_name="org.freedesktop.Notifications",
+                     interface="org.freedesktop.Notifications")
 
-    def wait():
-        try:
-            r = subprocess.run(["notify-send", "--app-name=Slack", "--icon=slack", "--wait",
-                                "--action=default=Open", title, body],
-                               capture_output=True, text=True, timeout=600)
-        except (OSError, subprocess.TimeoutExpired):
-            return
-        if r.stdout.strip() == "default":
-            subprocess.Popen(goto, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    threading.Thread(target=wait, daemon=True).start()
+
+def notify(db: Db, title: str, body: str, cid: str, ts: str, thread: str | None):
+    """A desktop notification; clicking it opens the conversation in the client. It goes straight
+    over D-Bus, never as a command's arguments, which other users on the machine could read."""
+    goto = [shutil.which("slack") or "slack", "goto", cid, ts] + ([thread] if thread else [])
+    omarchy = bool(shutil.which("omarchy-notification-send"))
+    threading.Thread(target=_notify, args=(title, body, goto, omarchy), daemon=True).start()
+
+
+def _notify(title: str, body: str, goto: list[str], omarchy: bool):
+    from jeepney import DBusAddress, HeaderFields, MatchRule, message_bus, new_method_call
+    from jeepney.io.blocking import Proxy, open_dbus_connection
+    addr = DBusAddress(**NOTIFICATIONS)
+    if omarchy:     # Omarchy's shell runs the click command itself, like omarchy-notification-send
+        hints = {"urgency": ("y", 0), "omarchy-glyph": ("s", "\uf198"), "omarchy-exec-argv": ("s", json.dumps(goto))}
+        actions = []
+    else:
+        hints, actions = {"urgency": ("y", 1)}, ["default", "Open"]
+    try:
+        with open_dbus_connection(bus="SESSION") as conn:
+            rule = MatchRule(type="signal", interface=NOTIFICATIONS["interface"], path=NOTIFICATIONS["object_path"])
+            with conn.filter(rule) as signals:
+                if actions:
+                    Proxy(message_bus, conn).AddMatch(rule)
+                reply = conn.send_and_get_reply(new_method_call(addr, "Notify", "susssasa{sv}i", (
+                    "Slack", 0, "" if omarchy else "slack", title, body, actions, hints, -1)), timeout=10)
+                nid = reply.body[0]
+                deadline = time.time() + 600
+                while actions and time.time() < deadline:
+                    sig = conn.recv_until_filtered(signals, timeout=deadline - time.time())
+                    if sig.body[0] != nid:
+                        continue
+                    if sig.header.fields.get(HeaderFields.member) == "ActionInvoked" and sig.body[1] == "default":
+                        subprocess.Popen(goto, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                         start_new_session=True)
+                    if sig.header.fields.get(HeaderFields.member) in ("ActionInvoked", "NotificationClosed"):
+                        return
+    except Exception:  # noqa: BLE001 - no notification daemon, or it went away: nothing to show
+        return
 
 
 def goto(cid: str, ts: str | None = None, thread: str | None = None):
