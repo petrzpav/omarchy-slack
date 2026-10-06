@@ -7,6 +7,8 @@ itself, when the daemon isn't running) writes what Slack sends; the client notic
 
 import itertools
 import os
+import re
+import shutil
 import subprocess
 import time
 import zlib
@@ -31,6 +33,7 @@ from .db import Db, is_top
 from .mrkdwn import (author, conv_name, emoji_char, emoji_names, fold, from_slack, has_layout, popular, render,
                      render_blocks, to_slack, user_name)
 
+TRELLO_LINK = re.compile(r"https?://(www\.)?trello\.com/[bc]/")
 RULE = 72                 # width of the day and "new" rules
 GROUP_GAP = 300            # same author within 5 minutes: no new name line
 MARK_AFTER = 1.0           # seconds at the bottom of a conversation before it counts as read
@@ -240,7 +243,7 @@ class MsgList(OptionList):
     BINDINGS = [Binding("enter", "select", show=False)]
 
     async def _on_click(self, event: events.Click):
-        """One click selects a message, a double click opens its thread."""
+        """One click selects a message (or opens the link under it), a double click opens its thread."""
         event.stop()
         event.prevent_default()                     # not OptionList's: it opens on one click
         i = event.style.meta.get("option")
@@ -248,7 +251,9 @@ class MsgList(OptionList):
             return
         self.focus()
         self.highlighted = i
-        if event.chain >= 2:
+        if event.style.meta.get("url"):
+            self.app.open_url(event.style.meta["url"])
+        elif event.chain >= 2:
             self.action_select()
 
     def action_cursor_up(self):
@@ -1042,9 +1047,14 @@ class SlackApp(App):
         self.submit("img", lambda: self.api.download(src[0], p), lambda _: self.repaint(), lambda e: None)
 
     def open_url(self, url):
-        if url:
-            subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+        """In the browser (files in imv, mpv…); Trello cards and boards in the Trello client when
+        it's installed and knows them."""
+        if not url:
+            return
+        cmd = ["xdg-open", url]
+        if TRELLO_LINK.match(url) and shutil.which("trello"):
+            cmd = ["sh", "-c", 'trello open "$1" || xdg-open "$1"', "sh", url]
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
     # -- lifecycle
 

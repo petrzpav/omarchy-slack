@@ -6,6 +6,7 @@ import unicodedata
 from functools import lru_cache
 
 import emoji as emojilib
+from rich.style import Style
 from rich.text import Text
 
 MENTION_STYLE = "bold #e8a33d"
@@ -136,17 +137,32 @@ def _inline(t: Text, s: str, base: str, custom: dict | None):
     t.append(emojize(s[pos:], custom), base)
 
 
+def _append_ref(out: Text, shown: str, style: str, link: str | None, links: list | None):
+    """A link carries its URL in the style's meta, so a click on it knows where to go."""
+    if not link:
+        return out.append(shown, style)
+    out.append(shown, Style.parse(style) + Style.from_meta({"url": link}))
+    if links is not None:
+        links.append(link)
+
+
 def render(text: str, users: dict, convs: dict, me: str, custom: dict | None = None,
            links: list | None = None) -> Text:
     """mrkdwn → Rich Text. Links found are appended to `links`."""
     out = Text()
     parts = re.split(r"```", text or "")
     for i, part in enumerate(parts):
-        if i % 2:                                     # code block
-            body = html.unescape(part.strip("\n"))
+        if i % 2:                                     # code block: links stay links, nothing else is styled
             out.append("\n" if out.plain and not out.plain.endswith("\n") else "")
-            for line in body.split("\n"):
-                out.append("  " + line + "\n", CODE_STYLE)
+            for line in part.strip("\n").split("\n"):
+                out.append("  ", CODE_STYLE)
+                pos = 0
+                for m in TOKEN.finditer(line):
+                    out.append(html.unescape(line[pos:m.start()]), CODE_STYLE)
+                    shown, style, link = _ref(html.unescape(m.group(1)), users, convs, me)
+                    _append_ref(out, shown, f"{CODE_STYLE} underline" if link else CODE_STYLE, link, links)
+                    pos = m.end()
+                out.append(html.unescape(line[pos:]) + "\n", CODE_STYLE)
             continue
         if i and part.startswith("\n"):             # right after a code block, which ended the line
             part = part[1:]
@@ -161,9 +177,7 @@ def render(text: str, users: dict, convs: dict, me: str, custom: dict | None = N
             for m in TOKEN.finditer(line):
                 _inline(out, html.unescape(line[pos:m.start()]), base, custom)
                 shown, style, link = _ref(html.unescape(m.group(1)), users, convs, me)
-                out.append(shown, style)
-                if link and links is not None:
-                    links.append(link)
+                _append_ref(out, shown, style, link, links)
                 pos = m.end()
             _inline(out, html.unescape(line[pos:]), base, custom)
             if j < len(lines) - 1:
@@ -175,11 +189,25 @@ def plain(text: str, users: dict, convs: dict, me: str = "") -> str:
     return render(text, users, convs, me).plain
 
 
+def _link(m) -> str:
+    """A URL as an explicit link; a closing bracket it didn't open is the text's: "(see https://x)"."""
+    url, rest = m.group(0), ""
+    while url[-1] in ")]" and url.count({")": "(", "]": "["}[url[-1]]) < url.count(url[-1]):
+        url, rest = url[:-1], url[-1] + rest
+    return f"<{url}>{rest}"
+
+
 def to_slack(text: str, users: dict, convs: dict) -> str:
     """What you typed → what Slack wants: @Name / #channel as ids, &<> escaped."""
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     # a line starting with "> " is a quote; Slack expects the raw ">"
     text = re.sub(r"(?m)^&gt; ", "> ", text)
+    # in a code block Slack would link a URL itself and leave out trailing dots, brackets…
+    # (expires:..2026-08-31.. loses its ".."); an explicit <url> keeps every character
+    parts = text.split("```")
+    for i in range(1, len(parts), 2):
+        parts[i] = re.sub(r"(?<![\w<|])https?://(?:[^\s&]|&(?!gt;|lt;))+", _link, parts[i])
+    text = "```".join(parts)
     names = {}
     for u in users.values():
         if u.get("deleted"):
