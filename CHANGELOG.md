@@ -42,6 +42,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `install.sh` with `--remove`; it leaves a `slack-sync.service` that isn't this plugin's alone.
 
 [Unreleased]: https://github.com/petrzpav/omarchy-slack/compare/staging...dev
-[0.2.1]: https://https://github.com/petrzpav/omarchy-slack/compare/v0.2.0...v0.2.1
+[0.2.1]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/petrzpav/omarchy-slack/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/petrzpav/omarchy-slack/releases/tag/v0.1.0
