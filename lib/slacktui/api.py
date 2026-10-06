@@ -90,7 +90,7 @@ class Slack:
     # -- writing
 
     def post(self, cid: str, text: str, thread_ts=None, broadcast=False) -> dict:
-        params = {"channel": cid, "text": text, "link_names": True}
+        params = {"channel": cid, "text": text, "link_names": True, "unfurl_links": False, "unfurl_media": False}
         if thread_ts:
             params["thread_ts"] = thread_ts
             if broadcast:

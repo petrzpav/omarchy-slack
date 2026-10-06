@@ -16,6 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from rich.segment import Segment
+from rich.style import Style as RichStyle
 from rich.table import Table
 from rich.text import Text
 from textual import events, on
@@ -23,6 +25,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
+from textual.selection import Selection
+from textual.strip import Strip
 from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
@@ -238,12 +242,58 @@ class Help(ModalScreen):
 # ------------------------------------------------------------ chat
 
 class MsgList(OptionList):
-    """The messages; ↑↓ select one, typing goes to the composer."""
+    """The messages; ↑↓ select one, typing goes to the composer. Any text can be selected
+    with the mouse (OptionList itself can't), like in a log."""
 
     BINDINGS = [Binding("enter", "select", show=False)]
+    ALLOW_SELECT = True
+
+    def render_line(self, y: int) -> Strip:
+        strip = super().render_line(y)
+        n = self.scroll_offset.y + y
+        sel = self.text_selection
+        if sel is not None and (span := sel.get_span(n)) is not None:
+            start, end = span
+            strip = self._highlight(strip, start, len(strip.text) if end == -1 else end)
+        return strip.apply_offsets(0, n)
+
+    def _highlight(self, strip: Strip, start: int, end: int) -> Strip:
+        """The characters start..end (not cells: an emoji is one) in the selection's colours."""
+        sel = self.screen.get_component_rich_style("screen--selection")
+        out, x = [], 0
+        for text, style, control in strip:
+            a, b = max(start - x, 0), min(end - x, len(text))
+            if a < b and not control:
+                out += [Segment(text[:a], style), Segment(text[a:b], (style or RichStyle()) + sel),
+                        Segment(text[b:], style)]
+            else:
+                out.append(Segment(text, style, control))
+            x += len(text)
+        return Strip([s for s in out if s.text or s.control], strip.cell_length)
+
+    def get_selection(self, selection: Selection) -> tuple[str, str] | None:
+        self._update_lines()
+        style = self.get_visual_style("option-list--option")
+        pad = self.get_component_styles("option-list--option").padding.left
+        lines = [self._get_line(style, n).text for n in range(len(self._lines))]
+        text = selection.extract("\n".join(lines))
+        # without the options' padding, the half block pictures and the spaces that fill the width
+        start_x = selection.start.x if selection.start else 0
+        out = []
+        for i, line in enumerate(text.split("\n")):
+            if (i or start_x < pad) and line[:pad].isspace():
+                line = line[pad:]
+            if not line.strip(" ▀"):
+                line = "" if line.strip() == "" else None
+            if line is not None:
+                out.append(line.rstrip())
+        return "\n".join(out).strip("\n"), "\n"
+
+    def selection_updated(self, selection: Selection | None) -> None:
+        self.refresh()
 
     async def _on_click(self, event: events.Click):
-        """One click selects a message (or opens the link under it), a double click opens its thread."""
+        """One click selects a message, Ctrl+click opens the link under it, a double click opens its thread."""
         event.stop()
         event.prevent_default()                     # not OptionList's: it opens on one click
         i = event.style.meta.get("option")
@@ -251,7 +301,7 @@ class MsgList(OptionList):
             return
         self.focus()
         self.highlighted = i
-        if event.style.meta.get("url"):
+        if event.ctrl and event.style.meta.get("url"):
             self.app.open_url(event.style.meta["url"])
         elif event.chain >= 2:
             self.action_select()
@@ -523,6 +573,8 @@ class ChatScreen(Screen):
         if m.get("edited"):
             t.append(" (edited)", "dim")
         for a in m.get("attachments", []) or []:
+            if a.get("from_url") and not a.get("is_msg_unfurl"):
+                continue                             # a link's preview: the link is in the text already
             title = a.get("title") or a.get("fallback") or ""
             if a.get("title_link"):
                 links.append(a["title_link"])
@@ -771,10 +823,13 @@ class ChatScreen(Screen):
         app.submit("bg", lambda: app.api.permalink(self.cid, m["ts"]), app.open_url, app.fail("Link"))
 
     def action_copy(self):
-        """Copy the selected text in the box, or the selected message."""
+        """Copy the text selected with the mouse or in the box, or else the selected message."""
         app: SlackApp = self.app
         c = self.query_one(Composer)
-        if c.has_focus:
+        if picked := self.get_selected_text():     # dragged over with the mouse
+            text = picked
+            self.clear_selection()
+        elif c.has_focus:
             text = c.selected_text
             if not text:
                 return
@@ -1369,8 +1424,9 @@ class SlackApp(App):
             (pretty(k["attach"]), "send a file"),
             "Messages",
             ("↑ (empty box)", "select messages; ↑ ↓ move, typing returns to the box"),
-            (pretty(k["copy"]), "copy the selected message (or the text selected in the box)"),
-            ("Shift+drag", "select any text on screen with the mouse"),
+            (pretty(k["copy"]), "copy the text selected with the mouse or in the box, else the selected message"),
+            ("Ctrl+click", "open the link under the mouse (Trello links in the Trello client)"),
+            ("drag", "select text in messages (Ctrl+C copies it)"),
             (pretty(k["react"]), "react to the selected message"),
             (pretty(k["edit"]), "edit your message"),
             (pretty(k["delete"]), "delete your message"),

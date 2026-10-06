@@ -31,10 +31,11 @@ listens itself. What you send shows at once and goes to Slack behind it.
 | `Enter` / double click on a message | open its thread (reply there; `Esc` back); one click selects |
 | `Ctrl+PgUp` / `Ctrl+PgDn` | previous / next thread (in a thread: switch to it) |
 | `Ctrl+R` | react (toggles); without a selection, to the newest message |
-| `Ctrl+C` | copy the selected message (or the text selected in the box) |
+| `Ctrl+C` | copy the text selected with the mouse or in the box, else the selected message |
 | `Ctrl+V` | paste: an image on the clipboard is sent (after asking), text goes in the box |
 | `Ctrl+A` | select all in the box |
-| `Shift+drag` | select any text on screen (the terminal's own selection) |
+| `Ctrl+click` | open the link under the mouse (Trello links in the Trello client) |
+| drag | select any text in the messages (`Shift+drag`: the terminal's own selection) |
 | `F2`, `Delete` | edit, delete your message |
 | `Ctrl+O`, `Alt+O` | open a file or link of the message (images in imv, videos in mpv), open it in the browser |
 | `Alt+U` | mark unread from the selected message |
