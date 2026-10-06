@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.2.2] - 2026-10-06
+
+### Changed
+
+- The Claude Code skill is installed only with `install.sh --skill`.
+
+### Security
+
+- Notification text goes to the desktop over D-Bus, never as command arguments other users could read.
+
 ## [0.2.1] - 2026-10-06
 
 ### Added
@@ -39,6 +49,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Bar widget with unread mentions and DMs.
 - `install.sh` with `--remove`; it leaves a `slack-sync.service` that isn't this plugin's alone.
 
+[0.2.2]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.1...v0.2.2
 [0.2.1]: https://https://github.com/petrzpav/omarchy-slack/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/petrzpav/omarchy-slack/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/petrzpav/omarchy-slack/releases/tag/v0.1.0
