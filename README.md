@@ -92,8 +92,9 @@ The same local copy is scriptable: `slack inbox` (everything unread), `convs`, `
 `edit`, `delete`, `mark`. A conversation is an id, `#channel`, `@person` or part of its name. Lists
 take `--json`; see `slack -h`.
 
-`install.sh` links `skill/` into `~/.claude/skills/slack` when Claude Code is installed, so Claude
-can catch you up and answer for you (it asks before posting).
+To let Claude Code catch you up and answer for you (it asks before posting), run
+`install.sh --skill`: it links `skill/` into `~/.claude/skills/slack`, so Claude knows the commands
+in every project. Plain `install.sh` leaves `~/.claude` alone; `--remove` takes the link back.
 
 ## License
 

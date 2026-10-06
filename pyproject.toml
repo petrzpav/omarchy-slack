@@ -9,6 +9,7 @@ dependencies = [
   "websockets>=13",
   "emoji>=2.12",
   "pillow>=10",
+  "jeepney>=0.8",
 ]
 
 [tool.uv]
