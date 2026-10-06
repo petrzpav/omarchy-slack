@@ -5,6 +5,7 @@
 # and never touches an existing config.
 #
 #   install.sh              install
+#   install.sh --skill      install, and also let Claude Code use `slack` (~/.claude/skills/slack)
 #   install.sh --remove     undo all of it (your config and local copy stay)
 
 set -euo pipefail
@@ -41,7 +42,7 @@ fi
 mkdir -p "$bin"
 link "$root/bin/slack"
 link "$root/bin/slack-window"
-if [[ -d $HOME/.claude ]]; then   # a skill, so Claude Code can drive the `slack` commands
+if [[ ${1:-} == --skill ]]; then   # only when asked: a skill is visible to Claude Code in every project
   skill="$HOME/.claude/skills/slack"
   if [[ -e $skill || -L $skill ]] && ! mine_link "$skill"; then
     echo "skipped $skill: it already exists and isn't from this plugin"
