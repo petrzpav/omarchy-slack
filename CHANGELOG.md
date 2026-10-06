@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
 ## [0.2.0] - 2026-10-06
 
 ### Added
@@ -33,5 +35,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Bar widget with unread mentions and DMs.
 - `install.sh` with `--remove`; it leaves a `slack-sync.service` that isn't this plugin's alone.
 
+[Unreleased]: https://https://github.com/petrzpav/omarchy-slack/compare/staging...dev
 [0.2.0]: https://github.com/petrzpav/omarchy-slack/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/petrzpav/omarchy-slack/releases/tag/v0.1.0
