@@ -9,7 +9,7 @@ from rich.text import Text
 from .config import CACHE_DIR
 
 THUMBS = CACHE_DIR / "thumbs"
-MAX_W, MAX_H = 48, 14          # cells
+MAX_W, MAX_H = 96, 30          # cells
 
 
 def source(f: dict) -> tuple[str, int, int] | None:
@@ -23,7 +23,7 @@ def source(f: dict) -> tuple[str, int, int] | None:
 
 
 def cells(w: int, h: int, max_w=MAX_W) -> tuple[int, int]:
-    cols = min(max_w, MAX_W, max(8, w // 8))
+    cols = min(max_w, MAX_W, max(8, w // 5))
     rows = max(2, round(cols * h / w / 2))
     if rows > MAX_H:
         rows = MAX_H
