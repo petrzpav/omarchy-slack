@@ -333,10 +333,23 @@ class MsgList(OptionList):
 
 
 class Composer(TextArea):
-    """Enter sends, Shift+Enter (or Ctrl+J) is a new line, Tab completes @name #channel :emoji:."""
+    """Enter sends, Shift+Enter (or Ctrl+J) is a new line, Tab completes @name #channel :emoji:.
+    After @ a dropdown offers people: ↑↓ choose, Enter or Tab pick, Esc closes it."""
 
     async def _on_key(self, event: events.Key):
         key = event.key
+        drop = self.screen.query_one("#mentions", OptionList)
+        if drop.display and key in ("up", "down", "enter", "tab", "escape"):
+            event.stop()
+            event.prevent_default()
+            if key in ("up", "down"):
+                n = drop.option_count
+                drop.highlighted = ((drop.highlighted or 0) + (1 if key == "down" else -1)) % n
+            elif key == "escape":
+                self.screen.hide_mentions()
+            else:
+                self.screen.pick_mention(drop.highlighted or 0)
+            return
         if key == "enter":
             event.stop()
             event.prevent_default()
@@ -376,6 +389,9 @@ class Composer(TextArea):
             return
         await super()._on_key(event)
 
+    def on_blur(self):
+        self.screen.hide_mentions()
+
 
 class ChatScreen(Screen):
     """A conversation (thread=None) or one thread in it."""
@@ -393,17 +409,23 @@ class ChatScreen(Screen):
         self.hold_read = False            # after "mark unread": don't mark read again until you leave
         self.links: dict[str, list[str]] = {}
         self._mark_timer = None
+        self.mention_hits: list[dict] = []
+        self.mention_at: tuple | None = None    # (row, start col, cursor col) of the @word being typed
 
     def compose(self) -> ComposeResult:
         yield Static(id="top")
         yield MsgList(id="msgs")
         yield Static(id="editing")
+        drop = OptionList(id="mentions")
+        drop.can_focus = False                # a click picks without taking focus from the composer
+        yield drop
         yield Composer(id="composer", soft_wrap=True, show_line_numbers=False, tab_behavior="indent",
                        highlight_cursor_line=False)
         yield Static(id="status")
 
     def on_mount(self):
         self.query_one("#editing").display = False
+        self.query_one("#mentions").display = False
         if self.cid:
             self.open(self.cid)
         self.query_one(Composer).focus()
@@ -944,6 +966,64 @@ class ChatScreen(Screen):
                 self.paint()
         app.submit("fg", post, done, failed)
 
+    # -- @ mentions
+
+    def mention_items(self) -> list[dict]:
+        """People to mention; who wrote here lately comes first."""
+        app: SlackApp = self.app
+        seen = {m.get("user"): i for i, m in enumerate(self.msgs)}
+        items = [{"text": user_name(u["id"], app.users), "insert": "@" + user_name(u["id"], app.users) + " ",
+                  "detail": (u.get("profile") or {}).get("real_name", ""), "boost": 1 + seen.get(u["id"], -1)}
+                 for u in app.users.values() if not u.get("deleted") and not u.get("is_bot")
+                 and u["id"] not in ("USLACKBOT", app.me)]
+        return items + [{"text": n, "insert": f"@{n} "} for n in ("here", "channel")]
+
+    @on(TextArea.Changed, "#composer")
+    @on(TextArea.SelectionChanged, "#composer")
+    def update_mentions(self):
+        c = self.query_one(Composer)
+        row, col = c.cursor_location
+        line = c.document.get_line(row)[:col]
+        m = re.search(r"(?:^|\s)@([^\s@]*)$", line)
+        if not m or not c.selection.is_empty or len(m.group(1)) > 30:
+            self.hide_mentions()
+            return
+        q = m.group(1)
+        at = (row, m.start(1) - 1, col)
+        if at == self.mention_at and self.query_one("#mentions").display:
+            return
+        self.mention_at = at
+        self.mention_hits = rank(self.mention_items(), q, limit=8)
+        if not self.mention_hits:
+            self.hide_mentions()
+            return
+        drop = self.query_one("#mentions", OptionList)
+        opts = []
+        for it in self.mention_hits:
+            t = Text("@") + highlight(it["text"], q, "bold")
+            if it.get("detail") and it["detail"] != it["text"]:
+                t += Text("  " + it["detail"], "dim")
+            opts.append(Option(t))
+        drop.set_options(opts)
+        drop.highlighted = 0
+        drop.display = True
+
+    def hide_mentions(self):
+        self.query_one("#mentions").display = False
+        self.mention_at = None
+
+    def pick_mention(self, i: int):
+        row, start, col = self.mention_at
+        it = self.mention_hits[i]
+        self.hide_mentions()
+        c = self.query_one(Composer)
+        c.replace(it["insert"], (row, start), (row, col))
+        c.focus()
+
+    @on(OptionList.OptionSelected, "#mentions")
+    def mention_clicked(self, ev: OptionList.OptionSelected):
+        self.pick_mention(ev.option_index)
+
     def complete(self):
         """Tab: finish the @name, #channel or :emoji: before the cursor."""
         app: SlackApp = self.app
@@ -996,6 +1076,8 @@ class SlackApp(App):
     #msgs:focus > .option-list--option-highlighted { background: SELBG; color: $foreground; text-style: none; }
     #msgs > .option-list--separator { color: $panel-lighten-2; }
     #editing { height: 1; }
+    #mentions { height: auto; max-height: 8; border: none; background: $surface; padding: 0 1; }
+    #mentions > .option-list--option-highlighted { background: ansi_blue; color: ansi_black; text-style: none; }
     #composer { height: auto; min-height: 3; max-height: 12; border: round $panel-lighten-2;
                 background: ansi_default; padding: 0 1; }
     #composer:focus { border: round $accent; }
@@ -1419,6 +1501,7 @@ class SlackApp(App):
             ("Enter", "send"),
             ("Shift+Enter / Ctrl+J", "new line"),
             ("Tab", "complete @name, #channel, :emoji:"),
+            ("@", "people to mention: ↑ ↓ choose, Enter/Tab insert, Esc close"),
             ("Ctrl+A", "select all in the box"),
             (pretty(k["paste"]), "paste: an image on the clipboard is sent, text goes in the box"),
             (pretty(k["attach"]), "send a file"),

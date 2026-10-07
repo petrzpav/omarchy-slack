@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Typing `@` in the message box shows a list of people to mention, filtered as you type.
+
 ## [0.2.2] - 2026-10-06
 
 ### Changed

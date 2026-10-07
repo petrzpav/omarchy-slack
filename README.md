@@ -27,6 +27,7 @@ listens itself. What you send shows at once and goes to Slack behind it.
 | `Ctrl+F` | search messages: local copy as you type, first line asks Slack |
 | `Enter`, `Shift+Enter` | send, new line (`Ctrl+J` also) |
 | `Tab` | complete `@name`, `#channel`, `:emoji:` |
+| `@` | a list of people to mention: `↑ ↓` choose, `Enter`/`Tab` insert, `Esc` close |
 | `↑` in an empty box | select messages; `↑ ↓` move, typing goes back to the box |
 | `Enter` / double click on a message | open its thread (reply there; `Esc` back); one click selects |
 | `Ctrl+PgUp` / `Ctrl+PgDn` | previous / next thread (in a thread: switch to it) |
