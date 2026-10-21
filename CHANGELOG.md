@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Typing `@` in the message box shows a list of people to mention, filtered as you type.
 
+## [0.2.3] - 2026-10-21
+
+### Fixed
+
+- Emoji in an attachment title, e.g. a Grafana alert, show as emoji instead of codes like `:red_circle:`.
+
 ## [0.2.2] - 2026-10-06
 
 ### Changed
@@ -56,7 +62,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `install.sh` with `--remove`; it leaves a `slack-sync.service` that isn't this plugin's alone.
 
 [Unreleased]: https://github.com/petrzpav/omarchy-slack/compare/staging...dev
-[0.2.1]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.0...v0.2.1
+[0.2.3]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.1...v0.2.2
 [0.2.1]: https://https://github.com/petrzpav/omarchy-slack/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/petrzpav/omarchy-slack/compare/v0.1.0...v0.2.0

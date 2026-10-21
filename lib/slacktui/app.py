@@ -34,7 +34,7 @@ from . import sync, thumbs
 from .api import Slack
 from .config import CACHE_DIR, Config
 from .db import Db, is_top
-from .mrkdwn import (author, conv_name, emoji_char, emoji_names, fold, from_slack, has_layout, popular, render,
+from .mrkdwn import (author, conv_name, emoji_char, emoji_names, emojize, fold, from_slack, has_layout, popular, render,
                      render_blocks, to_slack, user_name)
 
 TRELLO_LINK = re.compile(r"https?://(www\.)?trello\.com/[bc]/")
@@ -605,7 +605,7 @@ class ChatScreen(Screen):
                 t.append("\n")
                 if title:
                     t.append("▎ ", a.get("color") and f"#{a['color'].lstrip('#')}" or "dim")
-                    t.append(title, "bold")
+                    t.append(emojize(title, app.custom_emoji), "bold")
                 if text:
                     for line in render(text, users, app.convs, me, app.custom_emoji, links).split("\n"):
                         t.append("\n▎ ", "dim")
