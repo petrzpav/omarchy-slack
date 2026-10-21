@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.2.3] - 2026-10-21
+
+### Fixed
+
+- Emoji in an attachment title, e.g. a Grafana alert, show as emoji instead of codes like `:red_circle:`.
+
 ## [0.2.2] - 2026-10-06
 
 ### Changed
@@ -49,6 +55,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Bar widget with unread mentions and DMs.
 - `install.sh` with `--remove`; it leaves a `slack-sync.service` that isn't this plugin's alone.
 
+[0.2.3]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/petrzpav/omarchy-slack/compare/v0.2.1...v0.2.2
 [0.2.1]: https://https://github.com/petrzpav/omarchy-slack/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/petrzpav/omarchy-slack/compare/v0.1.0...v0.2.0
